@@ -1,10 +1,13 @@
 package com.example.lifemaster
 
+import android.content.res.Resources.Theme
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
@@ -29,8 +32,9 @@ class MainActivity : ComponentActivity() {
             LifeMasterTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colors.background
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    color = MaterialTheme.colors.background,
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     TopLevel()
                 }
@@ -40,50 +44,81 @@ class MainActivity : ComponentActivity() {
 }
 
 class ToDoViewModel : ViewModel() {
-    // viewmodel 내에서는 destruction 이 불가능하다.
+    // 다이얼로그 열렸는 지 유무
     var isDialogOpen by mutableStateOf(false) // delegated property
-    val onOpenDialog: (Boolean) -> Unit = {
-        isDialogOpen = it
+
+    // 할일 목록
+    var todoList = mutableStateListOf<ToDoItem>()
+
+    // 다이얼로그 내용
+    var todoContent by mutableStateOf("")
+
+    // 다이얼로그에서 추가 버튼 클릭 시 이벤트
+    val onSubmit: (String) -> Unit = { content ->
+        val key = (todoList.lastOrNull()?.key ?: 0) + 1 // key 는 0 이 아닌 1부터 시작한다.
+        todoList.add(ToDoItem(key, content)) // recomposition 시점
+        todoContent = ""
+    }
+
+    // 할일 목록에서 체크박스 눌렀을 때 이벤트
+    val onToggle: (Int, Boolean) -> Unit = { key, toggle ->
+        val i = todoList.indexOfFirst {
+            it.key == key
+        }
+        todoList[i] =
+            todoList[i].copy(isFinished = toggle) // list 에서는 원소의 프로퍼티가 아닌 원소 자체를 대체해야 recomposition 이 일어남
     }
 }
 
 @Composable
 fun TopLevel(toDoViewModel: ToDoViewModel = viewModel()) {
-    Scaffold { // Scaffold 를 왜 쓰는거지?
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_todo),
-                    contentDescription = "todo 아이콘"
-                )
-                Spacer(modifier = Modifier.size(4.dp))
-                Text(
-                    text = "할일",
-                    modifier = Modifier.weight(1f),
-                    fontWeight = FontWeight.Bold
-                )
-                Button(onClick = {
-                    toDoViewModel.isDialogOpen = true
-                }) {
-                    Text(text = "추가")
-                }
-            }
-            CustomDialog(
-                toDoViewModel.isDialogOpen,
-                toDoViewModel.onOpenDialog
+    Column(modifier = Modifier.padding(16.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_todo),
+                contentDescription = "todo 아이콘"
             )
+            Spacer(modifier = Modifier.size(4.dp))
+            Text(
+                text = "할일",
+                modifier = Modifier.weight(1f),
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = { toDoViewModel.isDialogOpen = true },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(text = "추가")
+            }
         }
+        Spacer(modifier = Modifier.size(8.dp))
+        LazyColumn {
+            items(toDoViewModel.todoList) { todoItem ->
+                ToDoItem(todoItem, toDoViewModel.onToggle)
+                Spacer(modifier = Modifier.size(8.dp))
+            }
+        }
+        CustomDialog(
+            toDoViewModel.isDialogOpen,
+            { toDoViewModel.isDialogOpen = it },
+            toDoViewModel.todoContent,
+            { toDoViewModel.todoContent = it },
+            toDoViewModel.onSubmit
+        )
     }
+
 }
 
 @Composable
 fun CustomDialog(
     isDialogOpen: Boolean,
-    onOpenDialog: (Boolean) -> Unit
+    onOpenDialog: (Boolean) -> Unit,
+    toDoContent: String,
+    onValueChanged: (String) -> Unit,
+    onSubmit: (String) -> Unit
 ) {
-    var todoContent by remember { mutableStateOf("") }
     if (isDialogOpen) {
         // 다이얼로그 열기
         Dialog(onDismissRequest = {
@@ -112,8 +147,8 @@ fun CustomDialog(
                     )
                     Spacer(modifier = Modifier.size(4.dp))
                     TextField(
-                        value = todoContent,
-                        onValueChange = { todoContent = it },
+                        value = toDoContent,
+                        onValueChange = onValueChanged,
                         singleLine = true, // 2줄 넘어가면 ui 망가져서 일단 설정함
                         label = {
                             Text(
@@ -124,7 +159,6 @@ fun CustomDialog(
                         shape = RoundedCornerShape(8.dp),
                         colors = TextFieldDefaults.textFieldColors(
                             backgroundColor = Color(0xFFF0F4F5),
-                            textColor = Color(0x13131399),
                             unfocusedIndicatorColor = Color.Transparent // underline remove
                         )
                     )
@@ -147,7 +181,10 @@ fun CustomDialog(
                         }
                         Spacer(modifier = Modifier.size(8.dp))
                         Button(
-                            onClick = { /*TODO*/ },
+                            onClick = {
+                                onSubmit(toDoContent)
+                                onOpenDialog(false)
+                            },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(16.dp),
@@ -165,24 +202,53 @@ fun CustomDialog(
 }
 
 @Composable
-fun ToDoItem() {
-    var isChecked by remember { mutableStateOf(false) }
-    var todoContent by remember { mutableStateOf("") }
-    Surface {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = isChecked, onCheckedChange = { isChecked = it })
-            Text(text = todoContent)
+fun ToDoItem(
+    todoItem: ToDoItem,
+    onToggle: (Int, Boolean) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0x195C76C3),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(4.dp)
+        ) {
+            Checkbox(
+                checked = todoItem.isFinished,
+                onCheckedChange = { onToggle ->
+                    onToggle(todoItem.key, onToggle)
+                },
+                colors = CheckboxDefaults.colors(
+                    uncheckedColor = Color(0xFF5C76C3),
+                    checkmarkColor = Color(0x4D5C76C3),
+                    checkedColor = Color(0x4D5C76C3) // 박스 경계와 박스 자체의 색깔을 둘 다 포함하는 파라미터임 -> 박스를 배경색과 동일하게 만들려면 커스터마이징 필요
+                )
+            )
+            Text(
+                text = todoItem.text,
+                modifier = Modifier.weight(1f),
+                color = Color(0xFF131313)
+            )
             Image(
                 painter = painterResource(id = R.drawable.ic_timer),
                 contentDescription = "pomodoro timer"
             )
             Image(
                 painter = painterResource(id = R.drawable.ic_show_more),
-                contentDescription = "화면 이동"
+                contentDescription = "화면 이동",
+                modifier = Modifier.padding(end = 4.dp)
             )
         }
     }
 }
+
+data class ToDoItem(
+    val key: Int, // 몇번째 항목 리스트인지 식별
+    val text: String, // 해당 항목의 내용
+    val isFinished: Boolean = false // 체크 박스 → 기본값은 false 로 설정
+)
 
 @Preview(showBackground = true)
 @Composable
