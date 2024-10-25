@@ -3,22 +3,28 @@ package com.example.lifemaster
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.lifemaster.ui.theme.LifeMasterTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        codeCacheDir.setReadOnly()
         setContent {
             LifeMasterTheme {
                 // A surface container using the 'background' color from the theme
@@ -26,31 +32,62 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    CustomDialogEx()
+                    TopLevel()
                 }
             }
         }
     }
 }
 
-@Composable
-fun Greeting(name: String) {
-    Text(text = "Hello $name!")
+class ToDoViewModel : ViewModel() {
+    // viewmodel 내에서는 destruction 이 불가능하다.
+    var isDialogOpen by mutableStateOf(false) // delegated property
+    val onOpenDialog: (Boolean) -> Unit = {
+        isDialogOpen = it
+    }
 }
 
 @Composable
-fun CustomDialogEx() {
-    var isDialogOpen by remember { mutableStateOf(false) }
-    var todoContent by remember { mutableStateOf("") }
-    Column {
-        Button(onClick = { isDialogOpen = true }) {
-            Text("추가")
+fun TopLevel(toDoViewModel: ToDoViewModel = viewModel()) {
+    Scaffold { // Scaffold 를 왜 쓰는거지?
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_todo),
+                    contentDescription = "todo 아이콘"
+                )
+                Spacer(modifier = Modifier.size(4.dp))
+                Text(
+                    text = "할일",
+                    modifier = Modifier.weight(1f),
+                    fontWeight = FontWeight.Bold
+                )
+                Button(onClick = {
+                    toDoViewModel.isDialogOpen = true
+                }) {
+                    Text(text = "추가")
+                }
+            }
+            CustomDialog(
+                toDoViewModel.isDialogOpen,
+                toDoViewModel.onOpenDialog
+            )
         }
     }
-    if(isDialogOpen) {
+}
+
+@Composable
+fun CustomDialog(
+    isDialogOpen: Boolean,
+    onOpenDialog: (Boolean) -> Unit
+) {
+    var todoContent by remember { mutableStateOf("") }
+    if (isDialogOpen) {
         // 다이얼로그 열기
         Dialog(onDismissRequest = {
-            isDialogOpen = false
+            onOpenDialog(false)
         }) {
             // slot api 인 content 안에서 다이얼로그 화면을 커스터마이징 하면 된다.
             // 항상 Surface 로 감싸주는 것이 좋다. Surface 로 감싸주지 않으면 무슨 일이 일어날까? 한번 확인해보자.
@@ -62,14 +99,14 @@ fun CustomDialogEx() {
                     modifier = Modifier.padding(20.dp)
                 ) {
                     Text(
-                        text ="할일 추가",
+                        text = "할일 추가",
                         color = Color.Black,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(modifier = Modifier.size(20.dp))
                     Text(
-                        text ="제목",
+                        text = "제목",
                         color = Color.Black,
                         fontSize = 16.sp
                     )
@@ -94,11 +131,14 @@ fun CustomDialogEx() {
                     Spacer(modifier = Modifier.size(20.dp))
                     Row {
                         Button(
-                            onClick = { isDialogOpen = false },
+                            onClick = { onOpenDialog(false) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(16.dp),
-                            colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFF0F4F5), contentColor = Color.Black) // https://kotlinworld.com/243 왜 elevation 이 적용됐지?
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color(0xFFF0F4F5),
+                                contentColor = Color.Black
+                            ) // 참고: https://kotlinworld.com/243 + 왜 elevation 이 적용됐지?
                         ) {
                             Text(
                                 text = "취소하기",
@@ -124,10 +164,30 @@ fun CustomDialogEx() {
     }
 }
 
+@Composable
+fun ToDoItem() {
+    var isChecked by remember { mutableStateOf(false) }
+    var todoContent by remember { mutableStateOf("") }
+    Surface {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = isChecked, onCheckedChange = { isChecked = it })
+            Text(text = todoContent)
+            Image(
+                painter = painterResource(id = R.drawable.ic_timer),
+                contentDescription = "pomodoro timer"
+            )
+            Image(
+                painter = painterResource(id = R.drawable.ic_show_more),
+                contentDescription = "화면 이동"
+            )
+        }
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
     LifeMasterTheme {
-        Greeting("Android")
+        TopLevel()
     }
 }
